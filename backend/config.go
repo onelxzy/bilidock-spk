@@ -61,6 +61,9 @@ func newConfigStore(dir string) (*ConfigStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dataRoot = abs
+	}
 	s := &ConfigStore{dir: dir, cfg: defaultConfig()}
 	path := filepath.Join(dir, "config.json")
 	if raw, err := os.ReadFile(path); err == nil {
@@ -144,9 +147,14 @@ func (s *ConfigStore) SetCookies(cookies map[string]string) error {
 }
 
 // probeWritable 通过写入临时探针文件真实验证目录可写权限。
+// 注意：仅允许在受信根目录（存储空间与套件私有目录）内操作，
+// 防止被用作在系统任意位置创建目录的入口。
 func probeWritable(dir string) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("目录为空")
+	}
+	if !isPathAllowed(dir) {
+		return fmt.Errorf("路径不在允许范围内（仅支持 /volume* 存储空间与套件数据目录）")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("无法创建目录：%w", err)
@@ -159,6 +167,66 @@ func probeWritable(dir string) error {
 	_ = f.Close()
 	_ = os.Remove(probe)
 	return nil
+}
+
+// dataRoot 记录当前套件实际使用的数据目录，作为受信根之一。
+// 由 newConfigStore 设置，确保套件私有目录内的下载始终可用。
+var dataRoot string
+
+// allowedRoots 返回允许写入的根目录集合（存储空间 + 套件数据目录）。
+func allowedRoots() []string {
+	roots := make([]string, 0, 10)
+	for i := 1; i <= 8; i++ {
+		roots = append(roots, fmt.Sprintf("/volume%d", i))
+	}
+	if st, err := os.Stat("/var/packages/bilidock"); err == nil && st.IsDir() {
+		roots = append(roots, "/var/packages/bilidock")
+	}
+	if dataRoot != "" {
+		roots = append(roots, dataRoot)
+	}
+	if v := os.Getenv("BILIDOCK_VAR"); v != "" {
+		roots = append(roots, v)
+	}
+	return roots
+}
+
+// isPathAllowed 判断目标路径是否位于受信根目录之下。
+func isPathAllowed(p string) bool {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	abs = filepath.Clean(abs)
+	for _, root := range allowedRoots() {
+		r, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		r = filepath.Clean(r)
+		if abs == r {
+			return true
+		}
+		if strings.HasPrefix(abs, r+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// isWithin 判断 child 是否位于 parent 目录之内（用于下载目录内的文件列举）。
+func isWithin(parent, child string) bool {
+	p, err1 := filepath.Abs(parent)
+	c, err2 := filepath.Abs(child)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	p = filepath.Clean(p)
+	c = filepath.Clean(c)
+	if c == p {
+		return true
+	}
+	return strings.HasPrefix(c, p+string(os.PathSeparator))
 }
 
 // ShareCandidate 表示一个可用的下载目录候选位置。

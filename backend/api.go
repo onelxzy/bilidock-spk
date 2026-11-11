@@ -2,15 +2,17 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"image/png"
+	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -595,15 +597,26 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleFiles 列出下载目录中的文件。
+// 安全约束：只允许列举配置下载目录下的子目录，禁止越权浏览系统其他路径。
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 	cfg := s.store.Get()
-	dir := cfg.DownloadDir
+	base := cfg.DownloadDir
+	if strings.TrimSpace(base) == "" {
+		writeErr(w, 400, fmt.Errorf("尚未设置下载目录"))
+		return
+	}
+	dir := base
 	if q := r.URL.Query().Get("dir"); q != "" {
-		if !filepath.IsAbs(q) {
-			dir = filepath.Join(cfg.DownloadDir, q)
-		} else {
+		if filepath.IsAbs(q) {
 			dir = q
+		} else {
+			dir = filepath.Join(base, q)
 		}
+	}
+	if !isWithin(base, dir) {
+		writeErr(w, 403, fmt.Errorf("只能浏览下载目录内的内容"))
+		return
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -641,10 +654,15 @@ func lookupPort(cfg Config) int {
 	return 18086
 }
 // handleCover 代理 B 站图片，绕过防盗链。
+// 安全约束：只允许 B 站/CDN 域名，防止被当作 SSRF 跳板访问内网或任意地址。
 func (s *Server) handleCover(w http.ResponseWriter, r *http.Request) {
 	raw := r.URL.Query().Get("url")
 	if raw == "" || (!strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://")) {
 		http.Error(w, "invalid url", 400)
+		return
+	}
+	if !isAllowedCDNHost(raw) {
+		http.Error(w, "host not allowed", 403)
 		return
 	}
 	// B 站返回的图片地址常为 http，HTTPS 页面直接引用会被判混合内容；
@@ -665,6 +683,34 @@ func (s *Server) handleCover(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(data)
+}
+
+// allowedCDNSuffixes 是图片代理允许访问的 B 站相关域名后缀。
+var allowedCDNSuffixes = []string{
+	".hdslb.com", ".bilibili.com", ".bilivideo.com", ".bilivideo.cn",
+	".biliapi.net", ".biliapi.com", ".biliimg.com", ".acgvideo.com",
+}
+
+// isAllowedCDNHost 校验 URL 主机是否属于允许的 B 站域名，拒绝内网与任意地址。
+func isAllowedCDNHost(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return false
+	}
+	// 拒绝裸 IP（含内网/回环）与本地主机名
+	if net.ParseIP(host) != nil || host == "localhost" {
+		return false
+	}
+	for _, suf := range allowedCDNSuffixes {
+		if strings.HasSuffix(host, suf) {
+			return true
+		}
+	}
+	return false
 }
 
 // handleDirs 仅返回当前套件有写权限的共享文件夹候选。
