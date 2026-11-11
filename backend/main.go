@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -62,6 +63,41 @@ func lookPath(name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s not found in PATH", name)
+}
+
+// portAvailable 检测回环端口是否可绑定。
+func portAvailable(port int) bool {
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
+
+// pickPort 返回可用端口：优先使用配置端口，被占用时顺延搜索。
+// 结果会写回配置，保证 CGI 代理能连到实际监听端口。
+func pickPort(store *ConfigStore, cfg Config, override int) int {
+	if override > 0 {
+		return override
+	}
+	want := cfg.Port
+	if want <= 0 {
+		want = defaultPort
+	}
+	if portAvailable(want) {
+		return want
+	}
+	log.Printf("端口 %d 已被占用，正在自动选择其他可用端口", want)
+	for p := want + 1; p < want+200; p++ {
+		if portAvailable(p) {
+			log.Printf("已切换到可用端口 %d", p)
+			_ = store.Update(func(c *Config) { c.Port = p })
+			return p
+		}
+	}
+	log.Printf("未找到可用端口，将尝试原端口 %d", want)
+	return want
 }
 
 func main() {
@@ -125,10 +161,7 @@ func main() {
 	mgr.StartSpeedTicker()
 
 	srv := NewServer(store, bili, mgr, dir)
-	listenPort := cfg.Port
-	if *port > 0 {
-		listenPort = *port
-	}
+	listenPort := pickPort(store, cfg, *port)
 	addr := fmt.Sprintf("127.0.0.1:%d", listenPort)
 	log.Printf("bilidock %s 启动，监听 %s，数据目录 %s", Version, addr, dir)
 	httpServer := &http.Server{

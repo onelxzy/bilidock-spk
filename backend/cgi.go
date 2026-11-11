@@ -31,10 +31,6 @@ func runCGI(port int) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	target := fmt.Sprintf("http://127.0.0.1:%d%s", port, path)
-	if qs := os.Getenv("QUERY_STRING"); qs != "" {
-		target += "?" + qs
-	}
 	method := os.Getenv("REQUEST_METHOD")
 	if method == "" {
 		method = http.MethodGet
@@ -43,17 +39,7 @@ func runCGI(port int) {
 	if n, err := strconv.Atoi(os.Getenv("CONTENT_LENGTH")); err == nil && n > 0 {
 		body = io.LimitReader(os.Stdin, int64(n))
 	}
-	req, err := http.NewRequest(method, target, body)
-	if err != nil {
-		cgiFail(502, err)
-		return
-	}
-	if ct := os.Getenv("CONTENT_TYPE"); ct != "" {
-		req.Header.Set("Content-Type", ct)
-	}
-	if ua := os.Getenv("HTTP_USER_AGENT"); ua != "" {
-		req.Header.Set("User-Agent", ua)
-	}
+
 	// 只访问 127.0.0.1：显式禁用所有代理。
 	// CGI 环境常带有 HTTP_PROXY/HTTPS_PROXY（可能来自客户端的 Proxy 头），
 	// Go 在 CGI 环境下会直接拒绝使用它们，导致转发失败。
@@ -66,13 +52,54 @@ func runCGI(port int) {
 			IdleConnTimeout:     30 * time.Second,
 		},
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		cgiFail(502, err)
+
+	// 端口可能因冲突自动顺延，因此依次尝试配置端口与其后若干端口，
+	// 取第一个真正在监听的服务。
+	ports := []int{port}
+	for i := 1; i <= 30; i++ {
+		ports = append(ports, port+i)
+	}
+
+	var lastErr error
+	for _, p := range ports {
+		target := fmt.Sprintf("http://127.0.0.1:%d%s", p, path)
+		if qs := os.Getenv("QUERY_STRING"); qs != "" {
+			target += "?" + qs
+		}
+		req, err := http.NewRequest(method, target, body)
+		if err != nil {
+			cgiFail(502, err)
+			return
+		}
+		if ct := os.Getenv("CONTENT_TYPE"); ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		if ua := os.Getenv("HTTP_USER_AGENT"); ua != "" {
+			req.Header.Set("User-Agent", ua)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			// 该端口无服务，换下一个端口重试（请求体需可重读，普通 API 为小 JSON）
+			if body != nil {
+				if n, e2 := strconv.Atoi(os.Getenv("CONTENT_LENGTH")); e2 == nil && n > 0 {
+					body = io.LimitReader(os.Stdin, int64(n))
+				}
+			}
+			continue
+		}
+		writeCGIResponse(resp)
 		return
 	}
-	defer resp.Body.Close()
+	if lastErr == nil {
+		lastErr = fmt.Errorf("本地服务未响应")
+	}
+	cgiFail(502, lastErr)
+}
 
+// writeCGIResponse 把后端响应转换为 CGI 输出。
+func writeCGIResponse(resp *http.Response) {
+	defer resp.Body.Close()
 	fmt.Printf("Status: %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode))
 	for k, vs := range resp.Header {
 		if hopHeaders[strings.ToLower(k)] {

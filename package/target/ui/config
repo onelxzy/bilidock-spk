@@ -2,7 +2,7 @@
   "Main.js": {
     "SYNO.SDS.BiliDock.Instance": {
       "type": "app",
-      "version": "1.0.1",
+      "version": "1.0.0",
       "desc": "B 站视频与番剧下载：扫码登录、原画画质、无损混流",
       "icon": "images/icon_{0}.png",
       "title": "BiliDock",

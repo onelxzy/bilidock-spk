@@ -36,9 +36,13 @@ type Config struct {
 	UUID             string            `json:"uuid"`
 }
 
+// 内部回环端口：沿用最初的 18086。
+// 仅用于本机 CGI 代理转发，不对外暴露。
+const defaultPort = 18086
+
 func defaultConfig() Config {
 	return Config{
-		Port:             18088,
+		Port:             defaultPort,
 		MaxTasks:         2,
 		ChunkConcurrency: 4,
 		UserAgent:        defaultUserAgent,
@@ -85,7 +89,7 @@ func newConfigStore(dir string) (*ConfigStore, error) {
 		s.cfg.ChunkConcurrency = 32
 	}
 	if s.cfg.Port <= 0 {
-		s.cfg.Port = 18088
+		s.cfg.Port = defaultPort
 	}
 	if strings.TrimSpace(s.cfg.UserAgent) == "" {
 		s.cfg.UserAgent = defaultUserAgent

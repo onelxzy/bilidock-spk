@@ -35,7 +35,7 @@ DSM 桌面窗口 (Ext JS AppWindow + iframe)
   ▼  /webman/3rdparty/bilidock/index.cgi/
 BiliDock CGI 代理 (同二进制 -cgi 模式，显式禁用外部环境变量代理直连回环)
   │
-  ▼  http://127.0.0.1:18088
+  ▼  http://127.0.0.1:18086
 BiliDock 常驻服务 (Go 单二进制 + 内嵌前端 + SSE 实时进度)
   ├── 登录与鉴权：passport 扫码、nav 缓存、WBI 签名、buvid 设备指纹
   ├── 内容解析：view / wbi/playurl / pgc/view/web/season / pgc/player/web/v2/playurl

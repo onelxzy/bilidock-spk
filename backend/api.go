@@ -651,7 +651,7 @@ func lookupPort(cfg Config) int {
 	if cfg.Port > 0 {
 		return cfg.Port
 	}
-	return 18086
+	return defaultPort
 }
 // handleCover 代理 B 站图片，绕过防盗链。
 // 安全约束：只允许 B 站/CDN 域名，防止被当作 SSRF 跳板访问内网或任意地址。
