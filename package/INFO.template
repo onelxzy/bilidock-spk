@@ -1,6 +1,6 @@
 package="bilidock"
 version="{version}"
-description="Bilibili video and bangumi downloader with QR login, codec selection, and lossless MP4 muxing"
+description="轻量化 B 站视频与番剧下载套件，直接在 DSM 桌面窗口内运行，支持扫码登录、多P/番剧批量选集、AVC/HEVC/AV1 编码选择与无损 MP4 混流"
 arch="{arch}"
 maintainer="onelxzy"
 maintainer_url="https://github.com/onelxzy/bilidock-spk"
