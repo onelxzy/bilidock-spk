@@ -1,0 +1,25 @@
+#!/bin/sh
+# 安装 / 升级 / 卸载处理
+PKG_ID="${SYNOPKG_PKGNAME}"
+DEST="${SYNOPKG_PKGDEST}"
+VAR="${SYNOPKG_PKGVAR}"
+
+case "$1" in
+  install|upgrade)
+    mkdir -p "${VAR}/logs" "${VAR}/tmp" "${VAR}/downloads" 2>/dev/null
+    mkdir -p "${DEST}/logs" 2>/dev/null
+    chmod 755 "${VAR}" "${VAR}/downloads" 2>/dev/null
+    chmod 750 "${VAR}/logs" "${VAR}/tmp" 2>/dev/null
+
+    chmod 755 "${DEST}/bin/bilidock" 2>/dev/null
+    chmod 755 "${DEST}/bin/ffmpeg" 2>/dev/null
+    chmod 755 "${DEST}/ui/index.cgi" 2>/dev/null
+    ;;
+  uninstall)
+    if [ -x "${DEST}/../scripts/start-stop-status" ]; then
+      "${DEST}/../scripts/start-stop-status" stop >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

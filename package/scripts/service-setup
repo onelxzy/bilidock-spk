@@ -1,0 +1,22 @@
+### Generic variables and functions
+### -------------------------------
+
+if [ -z "${SYNOPKG_PKGNAME}" ] || [ -z "${SYNOPKG_DSM_VERSION_MAJOR}" ]; then
+  echo "Error: Environment variables are not set." 1>&2;
+  echo "Please run me using synopkg instead. Example: \"synopkg start [packagename]\"" 1>&2;
+  exit 1
+fi
+
+PACKAGE_BASE="/var/packages/${SYNOPKG_PKGNAME}/target"
+SVC_CWD="${PACKAGE_BASE}"
+
+LOG_FILE="${PACKAGE_BASE}/logs/${SYNOPKG_PKGNAME}.log"
+PID_FILE="${SYNOPKG_PKGVAR}/${SYNOPKG_PKGNAME}.pid"
+
+### Package specific variables and functions
+### ----------------------------------------
+
+SERVICE_COMMAND[0]="./bin/bilidock"
+
+SVC_BACKGROUND=y
+SVC_WRITE_PID=y

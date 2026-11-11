@@ -1,0 +1,27 @@
+# 构建产物与缓存
+/dist/
+/cache/
+/var/
+*.spk
+*.exe
+*.tar.xz
+*.log
+*.tmp
+
+# 生成的包内二进制与动态产物（构建时由 build.py 生成）
+package/PACKAGE_ICON.PNG
+package/PACKAGE_ICON_256.PNG
+package/target/ui/index.cgi
+package/target/ui/images/
+backend/web/logo.png
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 系统与编辑器文件
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env

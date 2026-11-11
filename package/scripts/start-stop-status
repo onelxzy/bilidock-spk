@@ -1,0 +1,65 @@
+#!/bin/sh
+
+if [ -z "${SYNOPKG_PKGNAME}" ] || [ -z "${SYNOPKG_DSM_VERSION_MAJOR}" ]; then
+  echo "Error: Environment variables are not set." 1>&2;
+  echo "Please run me using synopkg instead. Example: \"synopkg start [packagename]\"" 1>&2;
+  exit 1
+fi
+
+PKG_ID="${SYNOPKG_PKGNAME}"
+BIN="${SYNOPKG_PKGDEST}/bin/bilidock"
+VAR="${SYNOPKG_PKGVAR}"
+PIDFILE="${VAR}/${PKG_ID}.pid"
+LOG="${SYNOPKG_PKGDEST}/logs/${PKG_ID}.log"
+
+[ -d "${VAR}" ] || mkdir -p "${VAR}"
+[ -d "${SYNOPKG_PKGDEST}/logs" ] || mkdir -p "${SYNOPKG_PKGDEST}/logs"
+export BILIDOCK_VAR="${VAR}"
+
+is_running() {
+  [ -f "${PIDFILE}" ] || return 1
+  pid=$(cat "${PIDFILE}" 2>/dev/null)
+  [ -n "${pid}" ] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+case "$1" in
+  start)
+    if is_running; then
+      exit 0
+    fi
+    rm -f "${PIDFILE}"
+    nohup "${BIN}" -var "${VAR}" >>"${LOG}" 2>&1 &
+    echo $! >"${PIDFILE}"
+    sleep 1
+    if is_running; then
+      exit 0
+    fi
+    rm -f "${PIDFILE}"
+    exit 1
+    ;;
+  stop)
+    if is_running; then
+      kill "$(cat "${PIDFILE}")" 2>/dev/null
+      i=0
+      while [ $i -lt 20 ] && is_running; do
+        sleep 1
+        i=$((i + 1))
+      done
+      if is_running; then
+        kill -9 "$(cat "${PIDFILE}")" 2>/dev/null
+      fi
+    fi
+    rm -f "${PIDFILE}"
+    exit 0
+    ;;
+  status)
+    if is_running; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    exit 1
+    ;;
+esac
